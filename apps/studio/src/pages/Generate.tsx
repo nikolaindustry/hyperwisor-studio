@@ -217,7 +217,7 @@ export function Generate() {
         {/* Right — preview */}
         <section className="bg-bg p-4 lg:p-5 flex flex-col min-h-[60vh]">
           <div className="text-[13px] font-medium text-muted">Live preview</div>
-          <Preview projectId={projectId} ready={!running && !!projectId && !error} />
+          <Preview projectId={projectId} creds={creds} />
         </section>
       </main>
 
