@@ -173,7 +173,9 @@ app.get("/api/template/zip", async (_req, reply) => {
     }
     reply
       .type("application/zip")
-      .header("Cache-Control", "public, max-age=300"); // 5 min browser cache
+      // Aggressive caching — the boilerplate rarely changes and the
+      // Preview download is the slowest "before-install" step.
+      .header("Cache-Control", "public, max-age=3600, stale-while-revalidate=86400");
     return Readable.fromWeb(upstream.body);
   } catch (e) {
     return reply.code(502).send({ error: e.message });

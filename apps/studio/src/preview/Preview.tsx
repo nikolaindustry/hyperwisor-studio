@@ -8,28 +8,24 @@
 
 import * as React from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
-import { WebContainer, type FileSystemTree } from "@webcontainer/api";
+import { type FileSystemTree, type WebContainer } from "@webcontainer/api";
 import { unzipSync } from "fflate";
 import type { Creds } from "@/api";
 import { ViewportToolbar, VIEWPORTS, type ViewportId } from "./ViewportToolbar";
+import { getContainer } from "./container";
 
 const TEMPLATE_ZIP_URL = "/api/template/zip";
 
 type Stage =
   | "idle"
   | "fetching"
-  | "mounting"
+  | "preparing"   // unzip + parse + wait for sandbox boot to finish
+  | "mounting"    // wc.mount()
   | "installing"
   | "booting"
   | "ready"
   | "updating"
   | "error";
-
-let bootPromise: Promise<WebContainer> | null = null;
-function getContainer() {
-  if (!bootPromise) bootPromise = WebContainer.boot();
-  return bootPromise;
-}
 
 export function Preview({
   projectId,
@@ -63,6 +59,10 @@ export function Preview({
     let cancelled = false;
     const log = (m: string) => !cancelled && setStageMessage(m);
 
+    // Kick off WebContainer boot RIGHT NOW, in parallel with the fetch.
+    // If StudioShell already pre-warmed it on sign-in, this is instant.
+    const containerPromise = getContainer();
+
     (async () => {
       try {
         setErrorDetail(null);
@@ -74,16 +74,23 @@ export function Preview({
         const buf = new Uint8Array(await res.arrayBuffer());
         if (cancelled) return;
 
-        setStage("mounting");
-        log("Unpacking…");
+        setStage("preparing");
+        log("Unpacking files…");
         const flat = stripTopFolder(unzipSync(buf));
         const tree = filesToTree(flat);
         injectEnvLocal(tree, creds);
+        const fileCount = countFiles(tree);
 
-        const wc = await getContainer();
+        // If the sandbox isn't ready yet, this is where the user waits.
+        log("Waiting for the sandbox…");
+        const wc = await containerPromise;
         wcRef.current = wc;
         if (cancelled) return;
+
+        setStage("mounting");
+        log(`Mounting ${fileCount} files into the sandbox…`);
         await wc.mount(tree);
+        if (cancelled) return;
 
         setStage("installing");
         log("Installing dependencies (≈ 60s the first time)…");
@@ -271,12 +278,22 @@ function ErrorPanel({ detail }: { detail: string | null }) {
 function labelForStage(s: Stage): string {
   switch (s) {
     case "fetching":   return "Downloading boilerplate";
+    case "preparing":  return "Preparing sandbox";
     case "mounting":   return "Mounting files";
     case "installing": return "Installing dependencies";
     case "booting":    return "Starting dev server";
     case "updating":   return "Applying generated changes";
     default:           return "Working";
   }
+}
+
+function countFiles(tree: FileSystemTree): number {
+  let n = 0;
+  for (const node of Object.values(tree)) {
+    if ("file" in node) n++;
+    else if ("directory" in node) n += countFiles(node.directory);
+  }
+  return n;
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────
