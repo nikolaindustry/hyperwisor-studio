@@ -1,0 +1,19 @@
+node_modules
+dist
+dist-ssr
+.DS_Store
+*.log
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Studio runtime: scratch project dirs the API writes during generation
+/tmp-projects/
+*.tsbuildinfo
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
