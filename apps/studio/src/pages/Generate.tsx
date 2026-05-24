@@ -12,6 +12,11 @@ import {
 import { useAuth } from "@/auth";
 import { api, type Product } from "@/api";
 import { Preview } from "@/preview/Preview";
+import { PageHeader } from "@/components/PageHeader";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Card } from "@/components/ui/Card";
+import { cn } from "@/lib/cn";
 
 type Event = {
   id: number;
@@ -27,24 +32,18 @@ export function Generate() {
   const navigate = useNavigate();
   const { creds, setAnthropicKey } = useAuth();
   const location = useLocation();
-  const product = (location.state as any)?.product as Product | undefined;
+  const product = (location.state as { product?: Product } | null)?.product;
   const hasAnthropicKey = Boolean(creds?.anthropicKey);
 
   const [events, setEvents] = React.useState<Event[]>([]);
   const [running, setRunning] = React.useState(false);
   const [projectId, setProjectId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const [stats, setStats] = React.useState<{
-    turns?: number;
-    cost?: number;
-    duration_ms?: number;
-  } | null>(null);
+  const [stats, setStats] = React.useState<{ turns?: number; cost?: number; duration_ms?: number } | null>(null);
   const logRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
-    if (logRef.current) {
-      logRef.current.scrollTop = logRef.current.scrollHeight;
-    }
+    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [events]);
 
   function start() {
@@ -56,7 +55,10 @@ export function Generate() {
     setRunning(true);
 
     let n = 0;
-    const cancel = api.generate(
+    const push = (p: Omit<Event, "id">) =>
+      setEvents((prev) => [...prev, { id: ++n, ...p }]);
+
+    api.generate(
       {
         apiKey: creds.apiKey,
         secretKey: creds.secretKey,
@@ -83,11 +85,7 @@ export function Generate() {
             push({ type: "tool", tool: ev.name, args: ev.args });
             break;
           case "agent.done":
-            setStats({
-              turns: ev.turns,
-              cost: ev.cost_usd,
-              duration_ms: ev.duration_ms,
-            });
+            setStats({ turns: ev.turns, cost: ev.cost_usd, duration_ms: ev.duration_ms });
             push({
               type: "log",
               message: `Agent done · ${ev.turns} turns · $${(ev.cost_usd || 0).toFixed(3)}`,
@@ -101,213 +99,180 @@ export function Generate() {
           case "studio.error":
             setRunning(false);
             setError(ev.message || ev.subtype || "Generation failed");
-            push({
-              type: "error",
-              message: ev.message || ev.subtype || "Error",
-            });
+            push({ type: "error", message: ev.message || ev.subtype || "Error" });
             break;
         }
       },
     );
-
-    function push(p: Omit<Event, "id">) {
-      setEvents((prev) => [...prev, { id: ++n, ...p }]);
-    }
-
-    return cancel;
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-10 bg-bg/85 backdrop-blur border-b border-border">
-        <div className="max-w-6xl mx-auto h-14 px-4 flex items-center gap-2">
-          <button
-            onClick={() => navigate("/products")}
-            className="icon-btn"
-            title="Back"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <div className="w-8 h-8 rounded-md bg-primary/15 text-primary flex items-center justify-center shrink-0">
-            <Cpu size={16} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold leading-tight truncate">
-              {product?.product_name ?? "Product"}
-            </div>
-            <div className="text-[11px] text-muted truncate">
-              {product?.product_category ?? "—"}
-              {product?.model_number ? ` · ${product.model_number}` : ""}
-              {` · ${id}`}
-            </div>
-          </div>
-
+    <>
+      <PageHeader
+        back={
+          <Button variant="ghost" size="sm" onClick={() => navigate("/products")}>
+            <ChevronLeft size={15} />
+            Products
+          </Button>
+        }
+        title={
           <div className="flex items-center gap-2">
+            <span className="w-6 h-6 rounded-md bg-primary/15 text-accent flex items-center justify-center">
+              <Cpu size={13} />
+            </span>
+            <span>{product?.product_name ?? "Product"}</span>
+          </div>
+        }
+        subtitle={
+          <>
+            {product?.product_category ?? "—"}
+            {product?.model_number ? ` · ${product.model_number}` : ""}
+            <span className="text-muted/60"> · {id}</span>
+          </>
+        }
+        actions={
+          <>
             {projectId && !running && !error ? (
               <a
                 href={api.zipUrl(projectId)}
-                className="btn-secondary"
                 download
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-[13px] font-medium border border-border bg-panel hover:bg-surface shadow-xs"
               >
                 <Download size={14} /> Download
               </a>
             ) : null}
-            <button
+            <Button
               onClick={start}
               disabled={running || !id || !hasAnthropicKey}
-              title={!hasAnthropicKey ? "Add your Anthropic API key below first" : undefined}
-              className="btn-primary"
+              title={!hasAnthropicKey ? "Add your Anthropic API key first" : undefined}
+              size="md"
             >
-              {running ? (
-                <span className="inline-block h-3.5 w-3.5 mr-1.5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-70" />
-              ) : (
-                <Play size={14} />
-              )}
+              {running ? null : <Play size={13} />}
               {running ? "Generating…" : "Generate"}
-            </button>
-          </div>
-        </div>
-      </header>
+            </Button>
+          </>
+        }
+      />
 
-      <main className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-px bg-border max-w-6xl mx-auto w-full">
-        {/* Left — log */}
-        <section className="bg-bg p-4 lg:p-5 flex flex-col min-h-[60vh]">
-          <div className="flex items-center gap-2 text-[13px] font-medium text-muted">
-            <Terminal size={14} /> Agent log
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(360px,_440px)_1fr]">
+        {/* LEFT — Agent log */}
+        <section className="border-r border-border flex flex-col min-h-0">
+          <div className="h-9 border-b border-border bg-panel px-3 flex items-center gap-2 text-[11.5px] text-muted">
+            <Terminal size={12} />
+            <span className="font-medium">Agent</span>
             {stats ? (
-              <span className="ml-auto text-[11px] tabular-nums">
-                {stats.turns} turns · {((stats.duration_ms ?? 0) / 1000).toFixed(1)}s · ${(
-                  stats.cost ?? 0
-                ).toFixed(3)}
+              <span className="ml-auto tabular-nums">
+                {stats.turns} turns · {((stats.duration_ms ?? 0) / 1000).toFixed(1)}s
+                · ${(stats.cost ?? 0).toFixed(3)}
               </span>
             ) : null}
           </div>
 
-          {!hasAnthropicKey && events.length === 0 ? (
-            <AnthropicKeyPrompt onSave={setAnthropicKey} />
-          ) : null}
-
-          <div
-            ref={logRef}
-            className="mt-3 flex-1 overflow-y-auto rounded-lg bg-panel border border-border p-3 text-sm space-y-2 font-mono text-[12.5px]"
-          >
-            {events.length === 0 ? (
-              <div className="text-muted text-[13px] font-sans">
-                {!hasAnthropicKey
-                  ? "Add your Anthropic API key above to enable generation."
-                  : running
-                  ? "Starting…"
-                  : "Click Generate to start. The agent will inspect this product, then write a bespoke React screen and verify it compiles."}
-              </div>
+          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2 bg-surface">
+            {!hasAnthropicKey && events.length === 0 ? (
+              <AnthropicKeyPrompt onSave={setAnthropicKey} />
             ) : null}
 
-            {events.map((ev) => (
-              <EventRow key={ev.id} ev={ev} />
-            ))}
-
-            {error ? (
-              <div className="text-danger flex items-start gap-1.5 pt-2 font-sans">
-                <XCircle size={14} className="mt-0.5 shrink-0" />
-                <span>{error}</span>
-              </div>
-            ) : null}
+            <div ref={logRef} className="space-y-2">
+              {events.length === 0 ? (
+                <p className="text-[12.5px] text-muted px-1 py-2">
+                  {!hasAnthropicKey
+                    ? "Add your Anthropic API key above to enable generation."
+                    : running
+                      ? "Starting…"
+                      : "Click Generate to start. The agent will inspect this product, write a bespoke React screen, and verify it compiles."}
+                </p>
+              ) : null}
+              {events.map((ev) => (
+                <EventRow key={ev.id} ev={ev} />
+              ))}
+              {error ? (
+                <div className="text-danger flex items-start gap-1.5 pt-2 text-[12.5px]">
+                  <XCircle size={14} className="mt-0.5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              ) : null}
+            </div>
           </div>
         </section>
 
-        {/* Right — preview */}
-        <section className="bg-bg p-4 lg:p-5 flex flex-col min-h-[60vh]">
-          <div className="text-[13px] font-medium text-muted">Live preview</div>
-          <Preview projectId={projectId} creds={creds} />
-        </section>
-      </main>
-
-      <style>{`
-        .icon-btn { width:36px; height:36px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; color:#A1A1AA; background: transparent; border:0; cursor:pointer; }
-        .icon-btn:hover { background:#1F1F23; color:#FAFAFA; }
-        .btn-primary { display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 12px; border-radius:8px; background:#3B82F6; color:white; font-weight:500; font-size:13px; border:0; cursor:pointer; }
-        .btn-primary:hover { opacity:.92; }
-        .btn-primary:disabled { opacity:.5; cursor:default; }
-        .btn-secondary { display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 12px; border-radius:8px; background:#131316; border:1px solid #27272A; color:#FAFAFA; font-weight:500; font-size:13px; cursor:pointer; text-decoration:none; }
-        .btn-secondary:hover { background:#1F1F23; }
-      `}</style>
-    </div>
+        {/* RIGHT — Preview */}
+        <Preview projectId={projectId} creds={creds} />
+      </div>
+    </>
   );
 }
 
 function AnthropicKeyPrompt({ onSave }: { onSave: (key: string) => void }) {
   const [key, setKey] = React.useState("");
   return (
-    <div className="mt-3 rounded-lg border border-primary/30 bg-primary/[0.06] p-4">
+    <Card className="border-primary/30 bg-primary/[0.06]">
       <div className="flex items-start gap-2.5">
-        <div className="w-9 h-9 rounded-md bg-primary/15 text-primary flex items-center justify-center shrink-0">
-          <KeyRound size={17} />
+        <div className="w-8 h-8 rounded-md bg-primary/15 text-accent flex items-center justify-center shrink-0">
+          <KeyRound size={15} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="font-medium text-sm">Add your Anthropic API key</div>
-          <div className="text-xs text-muted mt-0.5 leading-snug">
-            Studio is bring-your-own-key. The studio never stores it — it's
-            kept in your browser and only sent with this generate call.
-            Get one at{" "}
+          <div className="font-medium text-[13px]">Add your Anthropic API key</div>
+          <div className="text-[11.5px] text-muted mt-0.5 leading-snug">
+            Bring your own key — stored in your browser, sent only with the generate call.{" "}
             <a
               href="https://console.anthropic.com/settings/keys"
               target="_blank"
               rel="noreferrer"
-              className="text-primary"
+              className="text-accent hover:underline"
             >
-              console.anthropic.com
+              Get one
             </a>
             .
           </div>
         </div>
       </div>
       <div className="flex gap-2 mt-3">
-        <input
-          className="flex-1 h-9 rounded-md border border-border bg-bg px-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+        <Input
           type="password"
           placeholder="sk-ant-…"
           value={key}
           onChange={(e) => setKey(e.target.value)}
         />
-        <button
-          onClick={() => key.trim() && onSave(key.trim())}
-          disabled={!key.trim()}
-          className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-        >
+        <Button onClick={() => key.trim() && onSave(key.trim())} disabled={!key.trim()}>
           Save
-        </button>
+        </Button>
       </div>
-    </div>
+    </Card>
   );
 }
 
 function EventRow({ ev }: { ev: Event }) {
   if (ev.type === "thought") {
     return (
-      <div className="text-foreground font-sans text-[13px] leading-snug bg-surface/40 rounded-md p-2.5 animate-fade-in">
+      <div className="text-[12.5px] leading-snug bg-panel border border-border rounded-md px-3 py-2 text-text animate-fade-in">
         {ev.text}
       </div>
     );
   }
   if (ev.type === "tool") {
     return (
-      <div className="text-primary/90 animate-fade-in">
+      <div className="font-mono text-[11.5px] text-accent px-1 animate-fade-in">
         <span className="text-muted">→</span> {ev.tool}
-        {ev.args ? <span className="text-muted"> · {ev.args}</span> : null}
+        {ev.args ? <span className="text-muted/80"> · {ev.args}</span> : null}
       </div>
     );
   }
   if (ev.type === "success") {
     return (
-      <div className="text-success animate-fade-in font-sans">✓ {ev.message}</div>
+      <div className={cn("text-[12.5px] flex items-center gap-1.5 text-success px-1 animate-fade-in")}>
+        ✓ {ev.message}
+      </div>
     );
   }
   if (ev.type === "error") {
     return (
-      <div className="text-danger animate-fade-in font-sans">✗ {ev.message}</div>
+      <div className="text-[12.5px] text-danger px-1 animate-fade-in">
+        ✗ {ev.message}
+      </div>
     );
   }
-  // log
   return (
-    <div className="text-muted animate-fade-in">{ev.message}</div>
+    <div className="text-[11.5px] text-muted px-1 font-mono animate-fade-in">{ev.message}</div>
   );
 }

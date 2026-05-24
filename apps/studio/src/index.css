@@ -10,24 +10,34 @@ body,
 }
 
 body {
-  background: #09090b;
-  color: #fafafa;
+  background: #ffffff;
+  color: #0f1419;
   font-family: Inter, system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  border-color: #e4e6eb;
 }
 
 input,
 button,
-textarea {
+textarea,
+select {
   font-family: inherit;
-}
-
-* {
-  border-color: #27272a;
 }
 
 @layer utilities {
   .tabular-nums {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Subtle in-canvas grid background for the preview pane. */
+  .preview-canvas {
+    background-image:
+      radial-gradient(circle at 1px 1px, #e4e6eb 1px, transparent 0);
+    background-size: 18px 18px;
   }
 }

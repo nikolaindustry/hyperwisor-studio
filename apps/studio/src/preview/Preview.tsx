@@ -1,24 +1,18 @@
 /**
  * Live preview pane.
  *
- * Boots eagerly on mount with the boilerplate fetched straight from GitHub
- * (no Anthropic key required) so the manufacturer sees their real app
- * running immediately. When a generation completes, replaces the project
- * files with the agent's output and lets Vite HMR pick up the new screen.
- *
- * WebContainer requires the host page to be cross-origin isolated
- * (COOP/COEP) — configured in vite.config.ts.
+ * Boots eagerly on mount with the boilerplate from /api/template/zip, then
+ * swaps in the generated project when a generation completes. Wraps the
+ * iframe in a viewport selector (mobile / tablet / desktop / fit).
  */
 
 import * as React from "react";
-import { ExternalLink, Loader2, AlertTriangle, Play } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { WebContainer, type FileSystemTree } from "@webcontainer/api";
 import { unzipSync } from "fflate";
 import type { Creds } from "@/api";
+import { ViewportToolbar, VIEWPORTS, type ViewportId } from "./ViewportToolbar";
 
-// Served by our API as a CORS-friendly passthrough — GitHub's archive
-// endpoint doesn't include Access-Control-Allow-Origin, so the browser
-// can't fetch it directly.
 const TEMPLATE_ZIP_URL = "/api/template/zip";
 
 type Stage =
@@ -31,7 +25,6 @@ type Stage =
   | "updating"
   | "error";
 
-// One container per page.
 let bootPromise: Promise<WebContainer> | null = null;
 function getContainer() {
   if (!bootPromise) bootPromise = WebContainer.boot();
@@ -50,11 +43,22 @@ export function Preview({
   const [url, setUrl] = React.useState<string | null>(null);
   const [errorDetail, setErrorDetail] = React.useState<string | null>(null);
 
+  const [viewport, setViewport] = React.useState<ViewportId>("mobile");
+  const [customWidth, setCustomWidth] = React.useState<number>(
+    VIEWPORTS.mobile.width ?? 390,
+  );
+  const [iframeKey, setIframeKey] = React.useState(0);
+
   const wcRef = React.useRef<WebContainer | null>(null);
   const installedRef = React.useRef(false);
   const lastProjectRef = React.useRef<string | null>(null);
 
-  // ─── Eager boot of the template, once ───────────────────────────────
+  function pickViewport(id: ViewportId) {
+    setViewport(id);
+    if (VIEWPORTS[id].width) setCustomWidth(VIEWPORTS[id].width!);
+  }
+
+  // ─── Eager boot of the template ─────────────────────────────────────
   React.useEffect(() => {
     let cancelled = false;
     const log = (m: string) => !cancelled && setStageMessage(m);
@@ -64,9 +68,9 @@ export function Preview({
         setErrorDetail(null);
 
         setStage("fetching");
-        log("Downloading the boilerplate from GitHub…");
+        log("Downloading the boilerplate…");
         const res = await fetch(TEMPLATE_ZIP_URL);
-        if (!res.ok) throw new Error(`GitHub fetch failed (${res.status})`);
+        if (!res.ok) throw new Error(`Template fetch failed (${res.status})`);
         const buf = new Uint8Array(await res.arrayBuffer());
         if (cancelled) return;
 
@@ -116,18 +120,16 @@ export function Preview({
             },
           }),
         );
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (cancelled) return;
         setStage("error");
-        setErrorDetail(e?.message || String(e));
+        setErrorDetail(e instanceof Error ? e.message : String(e));
       }
     })();
 
     return () => {
       cancelled = true;
     };
-    // Intentionally run once on mount only — credentials are written into
-    // .env.local, and the dev server picks them up at boot.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -152,13 +154,12 @@ export function Preview({
         injectEnvLocal(tree, creds);
         await wcRef.current!.mount(tree);
         if (cancelled) return;
-        // Vite HMR will pick up file changes and refresh the iframe.
         setStage("ready");
         setStageMessage("");
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (cancelled) return;
         setStage("error");
-        setErrorDetail(e?.message || String(e));
+        setErrorDetail(e instanceof Error ? e.message : String(e));
       }
     })();
 
@@ -167,98 +168,119 @@ export function Preview({
     };
   }, [projectId, creds]);
 
+  const status =
+    stage === "ready"
+      ? ("live" as const)
+      : stage === "updating"
+        ? ("updating" as const)
+        : ("loading" as const);
+
   // ─── Render ─────────────────────────────────────────────────────────
-  if (stage === "error") {
-    return (
-      <div className="mt-3 flex-1 rounded-lg border border-danger/40 bg-danger/10 p-4 text-sm text-danger flex items-start gap-2">
-        <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-        <div className="min-w-0">
-          <div className="font-medium">Preview failed</div>
-          <div className="text-danger/80 mt-1 break-all">{errorDetail}</div>
-          {projectId ? (
-            <div className="text-muted mt-3 text-[12px]">
-              You can still download the generated project and run it locally.
-            </div>
-          ) : null}
-        </div>
-      </div>
-    );
-  }
-
-  if (stage !== "ready" && stage !== "updating") {
-    return (
-      <div className="mt-3 flex-1 rounded-lg border border-border bg-panel flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-sm max-w-sm text-center px-6">
-          {stage === "idle" ? (
-            <>
-              <div className="w-12 h-12 rounded-lg bg-surface flex items-center justify-center text-muted">
-                <Play size={20} />
-              </div>
-              <div className="text-muted">Waking up the preview…</div>
-            </>
-          ) : (
-            <>
-              <Loader2 size={22} className="animate-spin text-primary" />
-              <div className="text-foreground font-medium">{labelForStage(stage)}</div>
-              <div className="text-[12px] text-muted truncate w-full">
-                {stageMessage}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ready / updating
   return (
-    <div className="mt-3 flex-1 rounded-lg border border-border bg-panel overflow-hidden flex flex-col">
-      <div className="h-9 border-b border-border bg-surface/50 flex items-center px-3 gap-2 text-[11px] text-muted">
-        <span
-          className={
-            stage === "updating"
-              ? "w-2 h-2 rounded-full bg-primary animate-pulse"
-              : "w-2 h-2 rounded-full bg-success"
-          }
-        />
-        {stage === "updating" ? "Updating…" : "Live"}
-        <span className="ml-auto truncate">{url}</span>
-        {url ? (
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="text-muted hover:text-foreground"
-            title="Open in new tab"
-          >
-            <ExternalLink size={13} />
-          </a>
-        ) : null}
+    <div className="flex-1 flex flex-col min-h-0 border-l border-border bg-surface">
+      <ViewportToolbar
+        viewport={viewport}
+        onViewport={pickViewport}
+        width={customWidth}
+        onWidth={setCustomWidth}
+        status={status}
+        url={url}
+        onRefresh={() => setIframeKey((k) => k + 1)}
+      />
+
+      <div className="flex-1 min-h-0 preview-canvas overflow-auto p-4 flex items-start justify-center">
+        {stage === "error" ? (
+          <ErrorPanel detail={errorDetail} />
+        ) : url ? (
+          <Frame
+            url={url}
+            iframeKey={iframeKey}
+            viewport={viewport}
+            customWidth={customWidth}
+          />
+        ) : (
+          <LoadingPanel stage={stage} message={stageMessage} />
+        )}
       </div>
+    </div>
+  );
+}
+
+// ─── Sub-views ────────────────────────────────────────────────────────
+
+function Frame({
+  url,
+  iframeKey,
+  viewport,
+  customWidth,
+}: {
+  url: string;
+  iframeKey: number;
+  viewport: ViewportId;
+  customWidth: number;
+}) {
+  const fit = viewport === "fit";
+  const v = VIEWPORTS[viewport];
+  const style: React.CSSProperties = fit
+    ? { width: "100%", height: "100%" }
+    : {
+        width: customWidth,
+        height: v.height ?? 844,
+        maxWidth: "100%",
+      };
+  return (
+    <div
+      style={style}
+      className="bg-white rounded-xl shadow-lg overflow-hidden border border-border transition-all duration-200"
+    >
       <iframe
+        key={iframeKey}
         title="Preview"
-        src={url ?? "about:blank"}
-        className="flex-1 w-full bg-white"
+        src={url}
+        className="w-full h-full bg-white"
         sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts"
       />
     </div>
   );
 }
 
+function LoadingPanel({ stage, message }: { stage: Stage; message: string }) {
+  return (
+    <div className="m-auto rounded-lg border border-border bg-panel shadow-xs px-6 py-8 max-w-sm flex flex-col items-center gap-3 text-center">
+      <Loader2 size={22} className="animate-spin text-accent" />
+      <div className="text-[13px] font-medium">{labelForStage(stage)}</div>
+      <div className="text-[12px] text-muted truncate w-full font-mono">
+        {message}
+      </div>
+    </div>
+  );
+}
+
+function ErrorPanel({ detail }: { detail: string | null }) {
+  return (
+    <div className="m-auto max-w-md rounded-lg border border-danger/30 bg-danger/5 p-4 flex items-start gap-2 text-sm text-danger">
+      <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+      <div className="min-w-0">
+        <div className="font-medium">Preview failed</div>
+        <div className="text-danger/80 mt-1 break-all text-[12px]">{detail}</div>
+      </div>
+    </div>
+  );
+}
+
 function labelForStage(s: Stage): string {
   switch (s) {
-    case "fetching":  return "Downloading boilerplate";
-    case "mounting":  return "Mounting files";
-    case "installing":return "Installing dependencies";
-    case "booting":   return "Starting dev server";
-    case "updating":  return "Applying generated changes";
-    default:          return "Working";
+    case "fetching":   return "Downloading boilerplate";
+    case "mounting":   return "Mounting files";
+    case "installing": return "Installing dependencies";
+    case "booting":    return "Starting dev server";
+    case "updating":   return "Applying generated changes";
+    default:           return "Working";
   }
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────
 
-/** GitHub archive zips have everything under "<repo>-<branch>/" — strip it. */
 function stripTopFolder(flat: Record<string, Uint8Array>): Record<string, Uint8Array> {
   const keys = Object.keys(flat);
   if (keys.length === 0) return flat;
@@ -272,7 +294,6 @@ function stripTopFolder(flat: Record<string, Uint8Array>): Record<string, Uint8A
   return out;
 }
 
-/** Inject .env.local with Hyperwisor creds so the booted app can sign in. */
 function injectEnvLocal(tree: FileSystemTree, creds: Creds | null) {
   const lines = [
     `VITE_HW_API_KEY=${creds?.apiKey || ""}`,
@@ -282,7 +303,6 @@ function injectEnvLocal(tree: FileSystemTree, creds: Creds | null) {
   tree[".env.local"] = { file: { contents: lines.join("\n") } };
 }
 
-/** fflate flat map → WebContainer FileSystemTree. */
 function filesToTree(flat: Record<string, Uint8Array>): FileSystemTree {
   const root: FileSystemTree = {};
   for (const [rawPath, bytes] of Object.entries(flat)) {

@@ -3,6 +3,7 @@ import { useAuth } from "@/auth";
 import { Login } from "@/pages/Login";
 import { Products } from "@/pages/Products";
 import { Generate } from "@/pages/Generate";
+import { StudioShell } from "@/components/StudioShell";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { creds } = useAuth();
@@ -17,22 +18,19 @@ export function App() {
         path="/"
         element={creds ? <Navigate to="/products" replace /> : <Login />}
       />
+
+      {/* Shell-wrapped routes share the sidebar + chrome */}
       <Route
-        path="/products"
         element={
           <RequireAuth>
-            <Products />
+            <StudioShell />
           </RequireAuth>
         }
-      />
-      <Route
-        path="/generate/:id"
-        element={
-          <RequireAuth>
-            <Generate />
-          </RequireAuth>
-        }
-      />
+      >
+        <Route path="/products" element={<Products />} />
+        <Route path="/generate/:id" element={<Generate />} />
+      </Route>
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

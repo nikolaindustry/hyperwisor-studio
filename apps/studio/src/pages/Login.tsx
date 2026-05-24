@@ -2,6 +2,8 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { Sparkles } from "lucide-react";
 import { useAuth } from "@/auth";
+import { Button } from "@/components/ui/Button";
+import { Input, Label } from "@/components/ui/Input";
 
 export function Login() {
   const { signIn } = useAuth();
@@ -23,141 +25,101 @@ export function Login() {
         anthropicKey: anthropicKey.trim() || undefined,
       });
       navigate("/products", { replace: true });
-    } catch (err: any) {
-      setError(err?.message || "Couldn't verify those keys.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Couldn't verify those keys.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <div className="flex items-center gap-2 mb-8">
-          <div className="w-9 h-9 rounded-lg bg-primary/15 flex items-center justify-center text-primary">
-            <Sparkles size={18} />
+    <div className="min-h-screen flex items-center justify-center p-6 bg-surface">
+      <div className="w-full max-w-[400px]">
+        <div className="flex items-center gap-2 mb-7">
+          <div className="w-9 h-9 rounded-md bg-primary/15 text-accent flex items-center justify-center">
+            <Sparkles size={17} />
           </div>
           <div>
-            <div className="font-semibold leading-tight">Hyperwisor Studio</div>
-            <div className="text-xs text-muted">AI app designer for your IoT products</div>
+            <div className="text-[14px] font-semibold leading-tight">Hyperwisor Studio</div>
+            <div className="text-[11.5px] text-muted">AI app designer for your IoT products</div>
           </div>
         </div>
 
-        <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-        <p className="text-muted text-sm mt-1 mb-6">
-          Paste your Hyperwisor manufacturer keys to get started.
-        </p>
+        <div className="rounded-xl border border-border bg-panel shadow-md p-6">
+          <h1 className="text-[20px] font-semibold tracking-tight">Sign in</h1>
+          <p className="text-muted text-[13px] mt-1 mb-5">
+            Paste your Hyperwisor manufacturer keys.
+          </p>
 
-        <form onSubmit={onSubmit} className="flex flex-col gap-3">
-          <Field label="API key">
-            <input
-              className="input"
-              type="text"
-              placeholder="mk_…"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              autoComplete="off"
-              required
-            />
-          </Field>
-          <Field label="Secret key">
-            <input
-              className="input"
-              type="password"
-              placeholder="msk_…"
-              value={secretKey}
-              onChange={(e) => setSecretKey(e.target.value)}
-              autoComplete="off"
-              required
-            />
-          </Field>
-
-          <div className="mt-2 pt-4 border-t border-border">
-            <div className="text-[11px] font-medium uppercase tracking-wide text-muted mb-2">
-              AI generation · optional now
-            </div>
-            <Field label="Anthropic API key">
-              <input
-                className="input"
-                type="password"
-                placeholder="sk-ant-… (add now or when you generate)"
-                value={anthropicKey}
-                onChange={(e) => setAnthropicKey(e.target.value)}
+          <form onSubmit={onSubmit} className="flex flex-col gap-3.5">
+            <div className="flex flex-col gap-1.5">
+              <Label>API key</Label>
+              <Input
+                type="text"
+                placeholder="mk_…"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
                 autoComplete="off"
+                required
               />
-            </Field>
-            <p className="text-[11px] text-muted mt-1.5 leading-snug">
-              Bring your own key — you pay Anthropic directly, the studio
-              never holds it. Get one at{" "}
-              <a
-                href="https://console.anthropic.com/settings/keys"
-                target="_blank"
-                rel="noreferrer"
-                className="text-primary"
-              >
-                console.anthropic.com
-              </a>
-              .
-            </p>
-          </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label>Secret key</Label>
+              <Input
+                type="password"
+                placeholder="msk_…"
+                value={secretKey}
+                onChange={(e) => setSecretKey(e.target.value)}
+                autoComplete="off"
+                required
+              />
+            </div>
 
-          {error ? (
-            <p className="text-xs text-danger leading-snug">{error}</p>
-          ) : null}
+            <div className="pt-4 mt-1 border-t border-border">
+              <div className="text-[10.5px] font-semibold uppercase tracking-wide text-muted mb-2">
+                AI generation · optional now
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Anthropic API key</Label>
+                <Input
+                  type="password"
+                  placeholder="sk-ant-…"
+                  value={anthropicKey}
+                  onChange={(e) => setAnthropicKey(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+              <p className="text-[11px] text-muted mt-1.5 leading-relaxed">
+                Bring your own key — you pay Anthropic directly. The studio
+                never holds it. Get one at{" "}
+                <a
+                  href="https://console.anthropic.com/settings/keys"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-accent hover:underline"
+                >
+                  console.anthropic.com
+                </a>
+                .
+              </p>
+            </div>
 
-          <button type="submit" className="btn-primary mt-2" disabled={loading}>
-            {loading ? (
-              <span className="inline-block h-4 w-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent opacity-70" />
+            {error ? (
+              <div className="rounded-md border border-danger/30 bg-danger/5 px-3 py-2 text-[12.5px] text-danger">
+                {error}
+              </div>
             ) : null}
-            Continue
-          </button>
-        </form>
 
-        <p className="text-[11px] text-muted mt-6 leading-relaxed">
-          Keys are stored locally and never persisted server-side. Get them
-          from your Hyperwisor manufacturer dashboard.
+            <Button type="submit" size="lg" loading={loading} className="mt-2">
+              Continue
+            </Button>
+          </form>
+        </div>
+
+        <p className="text-[11px] text-muted text-center mt-4">
+          Keys are stored locally in your browser, never persisted on our server.
         </p>
       </div>
-
-      <style>{`
-        .input {
-          width: 100%;
-          height: 42px;
-          border-radius: 8px;
-          border: 1px solid #27272a;
-          background: #131316;
-          color: #fafafa;
-          padding: 0 12px;
-          font-size: 14px;
-          outline: none;
-          transition: border-color .15s, box-shadow .15s;
-        }
-        .input:focus { border-color: #3B82F6; box-shadow: 0 0 0 3px rgba(59,130,246,.18); }
-        .btn-primary {
-          height: 44px;
-          border-radius: 8px;
-          background: #3B82F6;
-          color: white;
-          font-weight: 500;
-          font-size: 14px;
-          border: 0;
-          cursor: pointer;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .btn-primary:hover { opacity: .92; }
-        .btn-primary:disabled { opacity: .5; cursor: default; }
-      `}</style>
     </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-[13px] font-medium">{label}</span>
-      {children}
-    </label>
   );
 }
