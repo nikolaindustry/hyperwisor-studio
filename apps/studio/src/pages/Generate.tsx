@@ -2,9 +2,11 @@ import * as React from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ChevronLeft,
+  Code2,
   Cpu,
   Download,
   KeyRound,
+  Monitor,
   Play,
   Terminal,
   XCircle,
@@ -12,6 +14,7 @@ import {
 import { useAuth } from "@/auth";
 import { api, type Product } from "@/api";
 import { Preview } from "@/preview/Preview";
+import { EditorPane } from "@/editor/EditorPane";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -196,10 +199,76 @@ export function Generate() {
           </div>
         </section>
 
-        {/* RIGHT — Preview */}
-        <Preview projectId={projectId} creds={creds} />
+        {/* RIGHT — Preview / Code tabs */}
+        <RightPane projectId={projectId} creds={creds} />
       </div>
     </>
+  );
+}
+
+type RightTab = "preview" | "code";
+
+function RightPane({
+  projectId,
+  creds,
+}: {
+  projectId: string | null;
+  creds: ReturnType<typeof useAuth>["creds"];
+}) {
+  const [tab, setTab] = React.useState<RightTab>("preview");
+  return (
+    <section className="flex flex-col min-h-0 border-l border-border">
+      <div className="h-9 shrink-0 border-b border-border bg-panel flex items-center px-2 gap-1">
+        <TabButton
+          active={tab === "preview"}
+          onClick={() => setTab("preview")}
+          icon={<Monitor size={12} />}
+          label="Preview"
+        />
+        <TabButton
+          active={tab === "code"}
+          onClick={() => setTab("code")}
+          icon={<Code2 size={12} />}
+          label="Code"
+        />
+      </div>
+      <div className="flex-1 min-h-0 flex flex-col">
+        {/* Both mounted so WebContainer state is preserved when switching */}
+        <div className={cn("flex-1 min-h-0 flex flex-col", tab === "preview" ? "" : "hidden")}>
+          <Preview projectId={projectId} creds={creds} />
+        </div>
+        <div className={cn("flex-1 min-h-0 flex flex-col", tab === "code" ? "" : "hidden")}>
+          <EditorPane projectId={projectId} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12px] font-medium transition-colors",
+        active
+          ? "bg-surface-2 text-text"
+          : "text-muted hover:bg-surface-2 hover:text-text",
+      )}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }
 
