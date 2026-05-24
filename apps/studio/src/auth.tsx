@@ -6,6 +6,8 @@ type State = {
   manufacturerId: string | null;
   signIn: (creds: Creds) => Promise<void>;
   signOut: () => void;
+  /** Add or replace the Anthropic key after sign-in. */
+  setAnthropicKey: (key: string) => void;
 };
 
 const Ctx = React.createContext<State | null>(null);
@@ -41,8 +43,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setManufacturerId(null);
   };
 
+  const setAnthropicKey = (key: string) => {
+    setCreds((prev) => {
+      if (!prev) return prev;
+      const next: Creds = { ...prev, anthropicKey: key.trim() || undefined };
+      try { localStorage.setItem(STORAGE, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
   return (
-    <Ctx.Provider value={{ creds, manufacturerId, signIn, signOut }}>
+    <Ctx.Provider
+      value={{ creds, manufacturerId, signIn, signOut, setAnthropicKey }}
+    >
       {children}
     </Ctx.Provider>
   );

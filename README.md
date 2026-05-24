@@ -28,10 +28,21 @@ A manufacturer signs in with their Hyperwisor keys, picks a product, and watches
     never sees one.)   
 ```
 
-- **Frontend** (`apps/studio`): Vite + React, runs on Vercel
-- **API** (`apps/api`): Fastify, runs on Render or Fly
+- **Frontend** (`apps/studio`): Vite + React, runs on Render Static Site (or Vercel)
+- **API** (`apps/api`): Fastify, runs on Render Web Service (or Fly) — long-running because agent runs take 2–4 min
 - **Generation**: Claude Agent SDK using `CLAUDE.md` from the starter as the playbook
 - **Preview**: [@webcontainer/api](https://webcontainers.io) — the generated Vite project boots inside a sandboxed iframe in the user's browser. No preview infra to run.
+
+### BYOK — Bring Your Own Key
+
+Studio is **bring-your-own-key** for Anthropic. Each manufacturer pastes
+their own `sk-ant-…` on the login screen; it's stored in their browser
+and sent only with `/api/generate` calls. The server never persists it
+and never uses a shared key. This means:
+
+- **No AI costs for you to bear.** The manufacturer pays Anthropic directly.
+- **No rate-limit engineering needed.** Each manufacturer has their own Anthropic quota.
+- **Full transparency.** They can audit their own Anthropic usage dashboard.
 
 ## Run locally
 
@@ -41,12 +52,13 @@ You need two terminals.
 
 ```bash
 cd apps/api
-# .env (in apps/api or exported in your shell)
-export ANTHROPIC_API_KEY=sk-ant-...
 export CORS_ORIGIN=http://localhost:5173
 npm run dev
 # → API on http://localhost:4000
 ```
+
+The API does NOT need an Anthropic key — the manufacturer brings theirs
+when they sign in.
 
 ### Terminal 2 — Web
 
@@ -79,17 +91,17 @@ The API is a long-running Node process (agent runs take 2–4 minutes, longer th
 3. **Build:** `npm install`
 4. **Start:** `npm start`
 5. **Environment:**
-   - `ANTHROPIC_API_KEY` (server-side, never exposed)
    - `CORS_ORIGIN=https://studio.hyperwisor.com`
    - `PORT=4000`
-6. Plan: **Standard** (the free tier sleeps and breaks long agent runs)
+   - *(No `ANTHROPIC_API_KEY` — the studio is BYOK.)*
+6. Plan: **Starter** (the free tier sleeps and breaks long agent runs)
 
 **Fly.io** alternative — drop in a basic `fly.toml` and `fly deploy`. The API has no special filesystem needs; `/tmp-projects/` is created automatically.
 
 ## Important notes
 
 - **Cross-origin isolation.** WebContainer requires the studio page to send `Cross-Origin-Embedder-Policy: require-corp` and `Cross-Origin-Opener-Policy: same-origin`. Already configured in `vite.config.ts`; mirror that in your Vercel `vercel.json` for production.
-- **AI cost.** Each generation runs ~17 turns of Claude Sonnet and costs ~$0.50. Bill into your Hyperwisor plan or rate-limit per manufacturer.
+- **AI cost.** Each generation runs ~17 turns of Claude Sonnet and costs ~$0.50 — paid by the manufacturer against their own Anthropic key (BYOK). The studio server never holds a key.
 - **Scratch projects.** The API writes each generation under `tmp-projects/<uuid>/`. Set a periodic cleanup or add a TTL — they pile up.
 
 ## Roadmap

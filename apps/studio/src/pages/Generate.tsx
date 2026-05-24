@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   Cpu,
   Download,
+  KeyRound,
   Play,
   Terminal,
   XCircle,
@@ -24,9 +25,10 @@ type Event = {
 export function Generate() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { creds } = useAuth();
+  const { creds, setAnthropicKey } = useAuth();
   const location = useLocation();
   const product = (location.state as any)?.product as Product | undefined;
+  const hasAnthropicKey = Boolean(creds?.anthropicKey);
 
   const [events, setEvents] = React.useState<Event[]>([]);
   const [running, setRunning] = React.useState(false);
@@ -46,7 +48,7 @@ export function Generate() {
   }, [events]);
 
   function start() {
-    if (!id || !creds || running) return;
+    if (!id || !creds || running || !hasAnthropicKey) return;
     setEvents([]);
     setProjectId(null);
     setError(null);
@@ -56,7 +58,9 @@ export function Generate() {
     let n = 0;
     const cancel = api.generate(
       {
-        ...creds,
+        apiKey: creds.apiKey,
+        secretKey: creds.secretKey,
+        anthropicKey: creds.anthropicKey!,
         productId: id,
         productName: product?.product_name,
       },
@@ -148,7 +152,12 @@ export function Generate() {
                 <Download size={14} /> Download
               </a>
             ) : null}
-            <button onClick={start} disabled={running || !id} className="btn-primary">
+            <button
+              onClick={start}
+              disabled={running || !id || !hasAnthropicKey}
+              title={!hasAnthropicKey ? "Add your Anthropic API key below first" : undefined}
+              className="btn-primary"
+            >
               {running ? (
                 <span className="inline-block h-3.5 w-3.5 mr-1.5 animate-spin rounded-full border-2 border-current border-t-transparent opacity-70" />
               ) : (
@@ -174,13 +183,19 @@ export function Generate() {
             ) : null}
           </div>
 
+          {!hasAnthropicKey && events.length === 0 ? (
+            <AnthropicKeyPrompt onSave={setAnthropicKey} />
+          ) : null}
+
           <div
             ref={logRef}
             className="mt-3 flex-1 overflow-y-auto rounded-lg bg-panel border border-border p-3 text-sm space-y-2 font-mono text-[12.5px]"
           >
             {events.length === 0 ? (
               <div className="text-muted text-[13px] font-sans">
-                {running
+                {!hasAnthropicKey
+                  ? "Add your Anthropic API key above to enable generation."
+                  : running
                   ? "Starting…"
                   : "Click Generate to start. The agent will inspect this product, then write a bespoke React screen and verify it compiles."}
               </div>
@@ -215,6 +230,52 @@ export function Generate() {
         .btn-secondary { display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 12px; border-radius:8px; background:#131316; border:1px solid #27272A; color:#FAFAFA; font-weight:500; font-size:13px; cursor:pointer; text-decoration:none; }
         .btn-secondary:hover { background:#1F1F23; }
       `}</style>
+    </div>
+  );
+}
+
+function AnthropicKeyPrompt({ onSave }: { onSave: (key: string) => void }) {
+  const [key, setKey] = React.useState("");
+  return (
+    <div className="mt-3 rounded-lg border border-primary/30 bg-primary/[0.06] p-4">
+      <div className="flex items-start gap-2.5">
+        <div className="w-9 h-9 rounded-md bg-primary/15 text-primary flex items-center justify-center shrink-0">
+          <KeyRound size={17} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-sm">Add your Anthropic API key</div>
+          <div className="text-xs text-muted mt-0.5 leading-snug">
+            Studio is bring-your-own-key. The studio never stores it — it's
+            kept in your browser and only sent with this generate call.
+            Get one at{" "}
+            <a
+              href="https://console.anthropic.com/settings/keys"
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary"
+            >
+              console.anthropic.com
+            </a>
+            .
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-2 mt-3">
+        <input
+          className="flex-1 h-9 rounded-md border border-border bg-bg px-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+          type="password"
+          placeholder="sk-ant-…"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+        />
+        <button
+          onClick={() => key.trim() && onSave(key.trim())}
+          disabled={!key.trim()}
+          className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Save
+        </button>
+      </div>
     </div>
   );
 }

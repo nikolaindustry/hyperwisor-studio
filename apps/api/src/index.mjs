@@ -28,13 +28,8 @@ import { generateScreen } from "./lib/agent.mjs";
 
 const PORT = Number(process.env.PORT || 4000);
 const HOST = process.env.HOST || "0.0.0.0";
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-
-if (!ANTHROPIC_API_KEY) {
-  console.warn(
-    "  ⚠ ANTHROPIC_API_KEY not set — agent runs will fail until you set it.",
-  );
-}
+// Studio is BYOK — manufacturers send their own Anthropic key with each
+// /api/generate request. We never store it server-side.
 
 const app = Fastify({ logger: { level: "info" } });
 
@@ -81,16 +76,18 @@ app.post("/api/products", async (req, reply) => {
 
 // ─── Generate (SSE) ──────────────────────────────────────────────────
 app.post("/api/generate", async (req, reply) => {
-  const { apiKey, secretKey, productId, productName } = req.body || {};
+  const { apiKey, secretKey, anthropicKey, productId, productName } =
+    req.body || {};
   if (!apiKey || !secretKey || !productId) {
     return reply
       .code(400)
       .send({ error: "apiKey, secretKey, productId required" });
   }
-  if (!ANTHROPIC_API_KEY) {
-    return reply
-      .code(503)
-      .send({ error: "Studio is missing ANTHROPIC_API_KEY" });
+  if (!anthropicKey || !anthropicKey.startsWith("sk-")) {
+    return reply.code(400).send({
+      error:
+        "anthropicKey required — paste your Anthropic API key on the login screen.",
+    });
   }
 
   // SSE setup
@@ -114,11 +111,7 @@ app.post("/api/generate", async (req, reply) => {
     await cloneTemplate(projectId, {
       onLog: (msg) => send({ type: "studio.log", message: msg }),
     });
-    writeEnv(projectId, {
-      apiKey,
-      secretKey,
-      anthropicKey: ANTHROPIC_API_KEY,
-    });
+    writeEnv(projectId, { apiKey, secretKey, anthropicKey });
     send({ type: "studio.log", message: ".env.local written" });
 
     await installDeps(projectId, {
@@ -129,6 +122,7 @@ app.post("/api/generate", async (req, reply) => {
       projectId,
       productId,
       productName: productName || productId,
+      anthropicKey,
       onEvent: send,
       abortController: ac,
     });

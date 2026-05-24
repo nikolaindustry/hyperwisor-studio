@@ -8,6 +8,7 @@ export function Login() {
   const navigate = useNavigate();
   const [apiKey, setApiKey] = React.useState("");
   const [secretKey, setSecretKey] = React.useState("");
+  const [anthropicKey, setAnthropicKey] = React.useState("");
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -16,7 +17,11 @@ export function Login() {
     setError(null);
     setLoading(true);
     try {
-      await signIn({ apiKey: apiKey.trim(), secretKey: secretKey.trim() });
+      await signIn({
+        apiKey: apiKey.trim(),
+        secretKey: secretKey.trim(),
+        anthropicKey: anthropicKey.trim() || undefined,
+      });
       navigate("/products", { replace: true });
     } catch (err: any) {
       setError(err?.message || "Couldn't verify those keys.");
@@ -66,6 +71,35 @@ export function Login() {
               required
             />
           </Field>
+
+          <div className="mt-2 pt-4 border-t border-border">
+            <div className="text-[11px] font-medium uppercase tracking-wide text-muted mb-2">
+              AI generation · optional now
+            </div>
+            <Field label="Anthropic API key">
+              <input
+                className="input"
+                type="password"
+                placeholder="sk-ant-… (add now or when you generate)"
+                value={anthropicKey}
+                onChange={(e) => setAnthropicKey(e.target.value)}
+                autoComplete="off"
+              />
+            </Field>
+            <p className="text-[11px] text-muted mt-1.5 leading-snug">
+              Bring your own key — you pay Anthropic directly, the studio
+              never holds it. Get one at{" "}
+              <a
+                href="https://console.anthropic.com/settings/keys"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary"
+              >
+                console.anthropic.com
+              </a>
+              .
+            </p>
+          </div>
 
           {error ? (
             <p className="text-xs text-danger leading-snug">{error}</p>

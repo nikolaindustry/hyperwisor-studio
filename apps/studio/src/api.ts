@@ -1,6 +1,11 @@
 /** Client for the Studio API. */
 
-export type Creds = { apiKey: string; secretKey: string };
+export type Creds = {
+  apiKey: string;
+  secretKey: string;
+  /** BYOK — only required when calling /generate. */
+  anthropicKey?: string;
+};
 
 export type Product = {
   id: string;
@@ -28,17 +33,29 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
 export const api = {
   async verify(creds: Creds): Promise<{ manufacturer_id: string }> {
-    return post("/auth/verify", creds);
+    return post("/auth/verify", {
+      apiKey: creds.apiKey,
+      secretKey: creds.secretKey,
+    });
   },
   async products(creds: Creds): Promise<{ products: Product[] }> {
-    return post("/products", creds);
+    return post("/products", {
+      apiKey: creds.apiKey,
+      secretKey: creds.secretKey,
+    });
   },
   /**
    * Streams generation events from the agent. Returns an unsubscribe.
    * The server keeps the HTTP connection open as Server-Sent Events.
    */
   generate(
-    body: Creds & { productId: string; productName?: string },
+    body: {
+      apiKey: string;
+      secretKey: string;
+      anthropicKey: string;
+      productId: string;
+      productName?: string;
+    },
     onEvent: (ev: any) => void,
   ): () => void {
     const controller = new AbortController();

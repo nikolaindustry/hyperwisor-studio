@@ -12,6 +12,8 @@ import { projectPath } from "./project.mjs";
  * @param {string} opts.projectId  scratch project id (cwd for the agent)
  * @param {string} opts.productId  Hyperwisor product UUID
  * @param {string} opts.productName  pre-fetched for friendlier prompt
+ * @param {string} opts.anthropicKey  the manufacturer's own Anthropic API key
+ *                 (BYOK — the studio server never holds this key)
  * @param {(ev: { type: string, [k: string]: any }) => void} opts.onEvent
  * @param {AbortController} [opts.abortController]
  */
@@ -19,6 +21,7 @@ export async function generateScreen({
   projectId,
   productId,
   productName,
+  anthropicKey,
   onEvent,
   abortController,
 }) {
@@ -70,6 +73,9 @@ Report success only after \`npx tsc --noEmit\` passes cleanly.
       maxTurns: 80,
       model: process.env.HYPERWISOR_AGENT_MODEL || "sonnet",
       abortController,
+      // Per-call env REPLACES the subprocess env. Spread process.env so
+      // PATH/HOME/etc. are inherited, then inject this user's key.
+      env: { ...process.env, ANTHROPIC_API_KEY: anthropicKey },
     },
   });
 
