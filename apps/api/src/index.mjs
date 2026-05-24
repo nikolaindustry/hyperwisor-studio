@@ -15,6 +15,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
+import { Readable } from "node:stream";
 import { verifyKeys, listProducts } from "./lib/hyperwisor.mjs";
 import {
   cloneTemplate,
@@ -25,6 +26,9 @@ import {
   zipTo,
 } from "./lib/project.mjs";
 import { generateScreen } from "./lib/agent.mjs";
+
+const TEMPLATE_ZIP_URL =
+  "https://github.com/nikolaindustry/hyperwisor-app-starter/archive/refs/heads/main.zip";
 
 const PORT = Number(process.env.PORT || 4000);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -153,6 +157,27 @@ app.get("/api/projects/:id/zip", async (req, reply) => {
 app.delete("/api/projects/:id", async (req) => {
   removeProject(req.params.id);
   return { ok: true };
+});
+
+// ─── Template proxy ──────────────────────────────────────────────────
+// Streams the hyperwisor-app-starter zip from GitHub through our origin
+// so the browser can fetch it (GitHub's archive endpoint doesn't send
+// Access-Control-Allow-Origin, so a direct browser fetch fails CORS).
+app.get("/api/template/zip", async (_req, reply) => {
+  try {
+    const upstream = await fetch(TEMPLATE_ZIP_URL, { redirect: "follow" });
+    if (!upstream.ok || !upstream.body) {
+      return reply
+        .code(502)
+        .send({ error: `GitHub fetch failed (${upstream.status})` });
+    }
+    reply
+      .type("application/zip")
+      .header("Cache-Control", "public, max-age=300"); // 5 min browser cache
+    return Readable.fromWeb(upstream.body);
+  } catch (e) {
+    return reply.code(502).send({ error: e.message });
+  }
 });
 
 // ─── Start ───────────────────────────────────────────────────────────

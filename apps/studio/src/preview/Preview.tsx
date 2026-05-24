@@ -16,8 +16,10 @@ import { WebContainer, type FileSystemTree } from "@webcontainer/api";
 import { unzipSync } from "fflate";
 import type { Creds } from "@/api";
 
-const TEMPLATE_ZIP_URL =
-  "https://github.com/nikolaindustry/hyperwisor-app-starter/archive/refs/heads/main.zip";
+// Served by our API as a CORS-friendly passthrough — GitHub's archive
+// endpoint doesn't include Access-Control-Allow-Origin, so the browser
+// can't fetch it directly.
+const TEMPLATE_ZIP_URL = "/api/template/zip";
 
 type Stage =
   | "idle"
