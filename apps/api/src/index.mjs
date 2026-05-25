@@ -87,12 +87,10 @@ app.post("/api/generate", async (req, reply) => {
       .code(400)
       .send({ error: "apiKey, secretKey, productId required" });
   }
-  if (!anthropicKey || !anthropicKey.startsWith("sk-")) {
-    return reply.code(400).send({
-      error:
-        "anthropicKey required — paste your Anthropic API key on the login screen.",
-    });
-  }
+  // anthropicKey is OPTIONAL — when omitted, the Agent SDK falls back to
+  // whatever Anthropic auth is on this server (typically Claude Code
+  // subscription auth when running locally). On a deployed server with
+  // no subscription auth + no key, the SDK will surface its own error.
 
   // SSE setup
   reply.raw.writeHead(200, {

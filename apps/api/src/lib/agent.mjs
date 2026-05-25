@@ -12,8 +12,10 @@ import { projectPath } from "./project.mjs";
  * @param {string} opts.projectId  scratch project id (cwd for the agent)
  * @param {string} opts.productId  Hyperwisor product UUID
  * @param {string} opts.productName  pre-fetched for friendlier prompt
- * @param {string} opts.anthropicKey  the manufacturer's own Anthropic API key
- *                 (BYOK — the studio server never holds this key)
+ * @param {string} [opts.anthropicKey]  the manufacturer's own Anthropic API key
+ *                 (BYOK). If omitted, the SDK uses whatever is in process.env
+ *                 — including Claude Code subscription auth when the studio
+ *                 API is running locally on a machine signed into Claude Code.
  * @param {(ev: { type: string, [k: string]: any }) => void} opts.onEvent
  * @param {AbortController} [opts.abortController]
  */
@@ -64,6 +66,19 @@ Report success only after \`npx tsc --noEmit\` passes cleanly.
 
   onEvent({ type: "agent.start", productId, productName });
 
+  // Per-call env REPLACES the subprocess env. Spread process.env so PATH/HOME
+  // and any Claude Code subscription auth files in the path stay reachable.
+  // Only inject ANTHROPIC_API_KEY when the caller actually supplied one;
+  // otherwise leave process.env as-is so the SDK can fall back to
+  // subscription auth (CLAUDE_CODE_OAUTH_TOKEN / ~/.claude credentials).
+  const subprocessEnv = { ...process.env };
+  if (anthropicKey && anthropicKey.startsWith("sk-")) {
+    subprocessEnv.ANTHROPIC_API_KEY = anthropicKey;
+  } else {
+    // strip any empty value so the SDK doesn't think a key is set
+    delete subprocessEnv.ANTHROPIC_API_KEY;
+  }
+
   const result = query({
     prompt,
     options: {
@@ -73,9 +88,7 @@ Report success only after \`npx tsc --noEmit\` passes cleanly.
       maxTurns: 80,
       model: process.env.HYPERWISOR_AGENT_MODEL || "sonnet",
       abortController,
-      // Per-call env REPLACES the subprocess env. Spread process.env so
-      // PATH/HOME/etc. are inherited, then inject this user's key.
-      env: { ...process.env, ANTHROPIC_API_KEY: anthropicKey },
+      env: subprocessEnv,
     },
   });
 

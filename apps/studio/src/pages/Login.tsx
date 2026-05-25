@@ -90,8 +90,10 @@ export function Login() {
                 />
               </div>
               <p className="text-[11px] text-muted mt-1.5 leading-relaxed">
-                Bring your own key — you pay Anthropic directly. The studio
-                never holds it. Get one at{" "}
+                Bring your own key — you pay Anthropic directly. Skip this if
+                you're running the studio locally and signed into{" "}
+                <strong>Claude Code</strong>; the agent will use your Claude
+                subscription instead. Get a key at{" "}
                 <a
                   href="https://console.anthropic.com/settings/keys"
                   target="_blank"

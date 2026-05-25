@@ -61,7 +61,7 @@ export function Generate() {
   }
 
   function start() {
-    if (!id || !creds || running || !hasAnthropicKey) return;
+    if (!id || !creds || running) return;
     setEvents([]);
     eventCounterRef.current = 0;
     setProjectId(null);
@@ -73,7 +73,9 @@ export function Generate() {
       {
         apiKey: creds.apiKey,
         secretKey: creds.secretKey,
-        anthropicKey: creds.anthropicKey!,
+        // Empty string when missing — API will fall back to Claude Code
+        // subscription auth on the server.
+        anthropicKey: creds.anthropicKey ?? "",
         productId: id,
         productName: product?.product_name,
       },
@@ -155,8 +157,7 @@ export function Generate() {
             ) : null}
             <Button
               onClick={start}
-              disabled={running || !id || !hasAnthropicKey}
-              title={!hasAnthropicKey ? "Add your Anthropic API key first" : undefined}
+              disabled={running || !id}
               size="md"
             >
               {running ? null : <Play size={13} />}
@@ -183,15 +184,15 @@ export function Generate() {
 
           <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2 bg-surface">
             {!hasAnthropicKey && events.length === 0 ? (
-              <AnthropicKeyPrompt onSave={setAnthropicKey} />
+              <AnthropicAuthHint onSave={setAnthropicKey} />
             ) : null}
 
             <div ref={logRef} className="space-y-2">
               {events.length === 0 ? (
                 <p className="text-[12.5px] text-muted px-1 py-2 leading-relaxed">
-                  {!hasAnthropicKey
-                    ? "Add your Anthropic API key above to enable generation."
-                    : "Click Generate. The agent reads CLAUDE.md, inspects the product, writes a bespoke screen, registers it, and verifies it compiles. Takes ~3 minutes, ~$0.50 against your key."}
+                  Click Generate. The agent reads CLAUDE.md, inspects the
+                  product, writes a bespoke screen, registers it, and verifies
+                  it compiles. Takes ~3 minutes.
                 </p>
               ) : null}
               {events.map((ev) => (
@@ -291,7 +292,7 @@ function TabButton({
   );
 }
 
-function AnthropicKeyPrompt({ onSave }: { onSave: (key: string) => void }) {
+function AnthropicAuthHint({ onSave }: { onSave: (key: string) => void }) {
   const [key, setKey] = React.useState("");
   return (
     <Card className="border-primary/30 bg-primary/[0.06]">
@@ -300,25 +301,27 @@ function AnthropicKeyPrompt({ onSave }: { onSave: (key: string) => void }) {
           <KeyRound size={15} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="font-medium text-[13px]">Add your Anthropic API key</div>
+          <div className="font-medium text-[13px]">Anthropic auth</div>
           <div className="text-[11.5px] text-muted mt-0.5 leading-snug">
-            Bring your own key — stored in your browser, sent only with the generate call.{" "}
+            If you're running the studio locally and signed into{" "}
+            <strong>Claude Code</strong>, you can leave this blank — the agent
+            uses your Claude subscription. Otherwise paste an API key (
             <a
               href="https://console.anthropic.com/settings/keys"
               target="_blank"
               rel="noreferrer"
               className="text-accent hover:underline"
             >
-              Get one
+              get one
             </a>
-            .
+            ).
           </div>
         </div>
       </div>
       <div className="flex gap-2 mt-3">
         <Input
           type="password"
-          placeholder="sk-ant-…"
+          placeholder="sk-ant-…  (optional)"
           value={key}
           onChange={(e) => setKey(e.target.value)}
         />
