@@ -1,34 +1,25 @@
 import * as React from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
-  ChevronDown,
   ChevronLeft,
-  ChevronRight,
   Code2,
-  Copy,
   Cpu,
   Download,
-  FileCode,
   KeyRound,
   Monitor,
   Play,
   Terminal,
   XCircle,
-  Zap,
 } from "lucide-react";
 import { useAuth } from "@/auth";
 import { api, type Product } from "@/api";
 import { Preview } from "@/preview/Preview";
 import { EditorPane } from "@/editor/EditorPane";
-import { applyGeneratedScreen } from "@/editor/applyGeneratedScreen";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/cn";
-
-type Mode = "quick" | "pro";
-const MODE_KEY = "hyperwisor-studio.mode";
 
 type Event = {
   id: number;
@@ -37,8 +28,6 @@ type Event = {
   tool?: string;
   args?: string;
   message?: string;
-  path?: string;
-  content?: string;
 };
 
 export function Generate() {
@@ -49,15 +38,6 @@ export function Generate() {
   const product = (location.state as { product?: Product } | null)?.product;
   const hasAnthropicKey = Boolean(creds?.anthropicKey);
 
-  const [mode, setModeState] = React.useState<Mode>(() => {
-    const stored = localStorage.getItem(MODE_KEY);
-    return stored === "pro" || stored === "quick" ? (stored as Mode) : "quick";
-  });
-  const setMode = (m: Mode) => {
-    setModeState(m);
-    try { localStorage.setItem(MODE_KEY, m); } catch { /* ignore */ }
-  };
-
   const [events, setEvents] = React.useState<Event[]>([]);
   const [running, setRunning] = React.useState(false);
   const [projectId, setProjectId] = React.useState<string | null>(null);
@@ -66,7 +46,6 @@ export function Generate() {
     turns?: number;
     cost?: number;
     duration_ms?: number;
-    tokens?: number;
   } | null>(null);
   const [previewRefreshSignal, setPreviewRefreshSignal] = React.useState(0);
   const logRef = React.useRef<HTMLDivElement>(null);
@@ -81,70 +60,14 @@ export function Generate() {
     setEvents((prev) => [...prev, { id: eventCounterRef.current, ...p }]);
   }
 
-  function reset() {
+  function start() {
+    if (!id || !creds || running || !hasAnthropicKey) return;
     setEvents([]);
     eventCounterRef.current = 0;
     setProjectId(null);
     setError(null);
     setStats(null);
-  }
-
-  // ─── Quick: Hyperwisor edge function ─────────────────────────────────
-  async function startQuick() {
-    if (!id || !creds || running) return;
-    reset();
     setRunning(true);
-    push({ type: "log", message: "Quick mode · Hyperwisor AI (Lovable gateway)" });
-    push({ type: "log", message: `Calling studio-generate-screen for "${product?.product_name ?? id}"…` });
-
-    try {
-      const res = await api.quickGenerate({
-        apiKey: creds.apiKey,
-        secretKey: creds.secretKey,
-        productId: id,
-      });
-
-      const tokens = res.usage?.total_tokens;
-      push({
-        type: "log",
-        message: `Model returned ${res.screen.content.length} chars${
-          tokens ? ` (${tokens} tokens)` : ""
-        }`,
-      });
-      setStats({ tokens, cost: 0 });
-
-      // Show the generated TSX inline (collapsed by default).
-      push({
-        type: "code",
-        path: res.screen.suggestedPath,
-        content: res.screen.content,
-      });
-
-      push({ type: "log", message: `Applying ${res.screen.suggestedPath}…` });
-      await applyGeneratedScreen(id, res.screen, (m) =>
-        push({ type: "log", message: m }),
-      );
-
-      // Force the Preview iframe to reload — WebContainer's HMR doesn't
-      // always pick up wc.fs.writeFile changes to registry-level imports.
-      setPreviewRefreshSignal((n) => n + 1);
-
-      push({ type: "success", message: "Done — Preview refreshed" });
-      setRunning(false);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
-      push({ type: "error", message: msg });
-      setRunning(false);
-    }
-  }
-
-  // ─── Pro: Studio API → Claude Agent SDK (BYOK) ───────────────────────
-  function startPro() {
-    if (!id || !creds || running || !hasAnthropicKey) return;
-    reset();
-    setRunning(true);
-    push({ type: "log", message: "Pro mode · Claude Agent SDK (BYOK)" });
 
     api.generate(
       {
@@ -181,7 +104,8 @@ export function Generate() {
             break;
           case "studio.done":
             setRunning(false);
-            push({ type: "success", message: "Generation complete" });
+            setPreviewRefreshSignal((n) => n + 1);
+            push({ type: "success", message: "Generation complete — Preview refreshed" });
             break;
           case "agent.error":
           case "studio.error":
@@ -193,16 +117,6 @@ export function Generate() {
       },
     );
   }
-
-  function start() {
-    if (mode === "quick") void startQuick();
-    else startPro();
-  }
-
-  const generateDisabled =
-    running || !id || (mode === "pro" && !hasAnthropicKey);
-  const generateTooltip =
-    mode === "pro" && !hasAnthropicKey ? "Add your Anthropic API key first" : undefined;
 
   return (
     <>
@@ -230,14 +144,6 @@ export function Generate() {
         }
         actions={
           <>
-            {/* Mode toggle */}
-            <ModeToggle
-              mode={mode}
-              onChange={setMode}
-              hasAnthropicKey={hasAnthropicKey}
-            />
-
-            {/* Download (Pro mode only — Quick writes straight to WebContainer) */}
             {projectId && !running && !error ? (
               <a
                 href={api.zipUrl(projectId)}
@@ -247,11 +153,10 @@ export function Generate() {
                 <Download size={14} /> Download
               </a>
             ) : null}
-
             <Button
               onClick={start}
-              disabled={generateDisabled}
-              title={generateTooltip}
+              disabled={running || !id || !hasAnthropicKey}
+              title={!hasAnthropicKey ? "Add your Anthropic API key first" : undefined}
               size="md"
             >
               {running ? null : <Play size={13} />}
@@ -267,33 +172,26 @@ export function Generate() {
           <div className="h-9 border-b border-border bg-panel px-3 flex items-center gap-2 text-[11.5px] text-muted">
             <Terminal size={12} />
             <span className="font-medium">Agent</span>
-            <span className="text-muted/60">·</span>
-            <span className="text-text font-medium">
-              {mode === "quick" ? "Quick" : "Pro"}
-            </span>
             {stats ? (
               <span className="ml-auto tabular-nums">
                 {stats.turns ? `${stats.turns} turns · ` : ""}
                 {stats.duration_ms ? `${(stats.duration_ms / 1000).toFixed(1)}s · ` : ""}
-                {stats.tokens ? `${stats.tokens} tok · ` : ""}
                 {typeof stats.cost === "number" ? `$${stats.cost.toFixed(3)}` : ""}
               </span>
             ) : null}
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2 bg-surface">
-            {mode === "pro" && !hasAnthropicKey && events.length === 0 ? (
+            {!hasAnthropicKey && events.length === 0 ? (
               <AnthropicKeyPrompt onSave={setAnthropicKey} />
             ) : null}
 
             <div ref={logRef} className="space-y-2">
               {events.length === 0 ? (
-                <p className="text-[12.5px] text-muted px-1 py-2">
-                  {mode === "quick"
-                    ? "Quick mode — Hyperwisor's AI writes a single TSX file in ~6s and patches it into the live preview. Free, no Anthropic key required."
-                    : !hasAnthropicKey
-                      ? "Add your Anthropic API key above to enable Pro mode."
-                      : "Pro mode — Claude Agent SDK reads files, iterates, runs tsc. ~3 min, polished output."}
+                <p className="text-[12.5px] text-muted px-1 py-2 leading-relaxed">
+                  {!hasAnthropicKey
+                    ? "Add your Anthropic API key above to enable generation."
+                    : "Click Generate. The agent reads CLAUDE.md, inspects the product, writes a bespoke screen, registers it, and verifies it compiles. Takes ~3 minutes, ~$0.50 against your key."}
                 </p>
               ) : null}
               {events.map((ev) => (
@@ -317,71 +215,6 @@ export function Generate() {
         />
       </div>
     </>
-  );
-}
-
-// ─── Mode toggle ──────────────────────────────────────────────────────
-
-function ModeToggle({
-  mode,
-  onChange,
-  hasAnthropicKey,
-}: {
-  mode: Mode;
-  onChange: (m: Mode) => void;
-  hasAnthropicKey: boolean;
-}) {
-  return (
-    <div className="flex items-center bg-surface rounded-md p-0.5 border border-border">
-      <ModeOption
-        active={mode === "quick"}
-        onClick={() => onChange("quick")}
-        icon={<Zap size={11} />}
-        label="Quick"
-        hint="Free · ~6s"
-      />
-      <ModeOption
-        active={mode === "pro"}
-        onClick={() => onChange("pro")}
-        icon={<Cpu size={11} />}
-        label="Pro"
-        hint={hasAnthropicKey ? "BYOK · ~3 min" : "Needs Anthropic key"}
-        dimmed={!hasAnthropicKey}
-      />
-    </div>
-  );
-}
-
-function ModeOption({
-  active,
-  onClick,
-  icon,
-  label,
-  hint,
-  dimmed,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-  hint: string;
-  dimmed?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      title={hint}
-      className={cn(
-        "flex items-center gap-1.5 h-7 px-2.5 rounded text-[11.5px] font-medium transition-colors",
-        active
-          ? "bg-panel text-text shadow-xs"
-          : "text-muted hover:text-text",
-        dimmed && !active && "opacity-60",
-      )}
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
   );
 }
 
@@ -513,9 +346,6 @@ function EventRow({ ev }: { ev: Event }) {
       </div>
     );
   }
-  if (ev.type === "code") {
-    return <CodeBlock path={ev.path ?? ""} content={ev.content ?? ""} />;
-  }
   if (ev.type === "success") {
     return (
       <div className={cn("text-[12.5px] flex items-center gap-1.5 text-success px-1 animate-fade-in")}>
@@ -532,52 +362,5 @@ function EventRow({ ev }: { ev: Event }) {
   }
   return (
     <div className="text-[11.5px] text-muted px-1 font-mono animate-fade-in">{ev.message}</div>
-  );
-}
-
-function CodeBlock({ path, content }: { path: string; content: string }) {
-  const [open, setOpen] = React.useState(true);
-  const [copied, setCopied] = React.useState(false);
-  const lineCount = content.split("\n").length;
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1400);
-    } catch { /* ignore */ }
-  }
-
-  return (
-    <div className="rounded-md border border-border bg-panel overflow-hidden animate-fade-in">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2 px-3 h-8 hover:bg-surface-2 transition-colors text-left"
-      >
-        {open ? (
-          <ChevronDown size={12} className="text-muted shrink-0" />
-        ) : (
-          <ChevronRight size={12} className="text-muted shrink-0" />
-        )}
-        <FileCode size={12} className="text-accent shrink-0" />
-        <span className="text-[12px] font-mono text-text truncate">{path}</span>
-        <span className="ml-auto text-[10.5px] text-muted tabular-nums">
-          {lineCount} lines · {content.length} chars
-        </span>
-        <button
-          onClick={(e) => { e.stopPropagation(); void copy(); }}
-          className="h-6 px-1.5 rounded text-muted hover:text-text hover:bg-surface-2 flex items-center gap-1 text-[11px]"
-          title="Copy"
-        >
-          <Copy size={11} />
-          {copied ? "Copied" : ""}
-        </button>
-      </button>
-      {open ? (
-        <pre className="max-h-[280px] overflow-auto m-0 px-3 py-2 text-[11.5px] leading-snug bg-bg border-t border-border font-mono whitespace-pre">
-          {content}
-        </pre>
-      ) : null}
-    </div>
   );
 }
