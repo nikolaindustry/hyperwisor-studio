@@ -19,7 +19,14 @@ const SENTINEL_FILE = "/package.json"; // proxy for "mount completed"
 
 type Status = "waiting" | "loading" | "ready" | "error";
 
-export function EditorPane({ projectId }: { projectId: string | null }) {
+export function EditorPane({
+  projectId,
+  refreshSignal = 0,
+}: {
+  projectId: string | null;
+  /** Bump to re-walk the WebContainer FS (used after Quick mode writes files). */
+  refreshSignal?: number;
+}) {
   const [status, setStatus] = React.useState<Status>("waiting");
   const [tree, setTree] = React.useState<Node[]>([]);
   const [activePath, setActivePath] = React.useState<string | null>(null);
@@ -70,13 +77,20 @@ export function EditorPane({ projectId }: { projectId: string | null }) {
     };
   }, [refresh]);
 
-  // Re-walk when a generation completes
+  // Re-walk when a generation completes (Pro mode sets a new projectId)
   React.useEffect(() => {
     if (!projectId) return;
-    // Small delay so the new mount can settle before we walk
     const t = window.setTimeout(() => { void refresh(); }, 400);
     return () => window.clearTimeout(t);
   }, [projectId, refresh]);
+
+  // Re-walk when Quick mode pings us (no projectId change, just new files)
+  const initialSignalRef = React.useRef(refreshSignal);
+  React.useEffect(() => {
+    if (refreshSignal === initialSignalRef.current) return;
+    const t = window.setTimeout(() => { void refresh(); }, 200);
+    return () => window.clearTimeout(t);
+  }, [refreshSignal, refresh]);
 
   // ─── Read selected file ──────────────────────────────────────────────
   React.useEffect(() => {

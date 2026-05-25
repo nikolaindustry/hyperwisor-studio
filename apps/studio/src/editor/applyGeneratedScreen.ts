@@ -35,14 +35,16 @@ export async function applyGeneratedScreen(
   log("Waiting for the boilerplate to finish mounting…");
   await waitForFile(wc, SENTINEL_PATH);
 
-  // 1. mkdir -p
+  // 1. mkdir -p the parent directory
   const parent = screen.suggestedPath.replace(/\/[^/]+$/, "");
   if (parent && parent !== screen.suggestedPath) {
     try {
-      // recursive mkdir; WebContainer fs supports it
       await wc.fs.mkdir(parent, { recursive: true });
-    } catch {
-      /* already exists — fine */
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/EEXIST|exists/i.test(msg)) {
+        log(`mkdir ${parent} warning: ${msg}`);
+      }
     }
   }
 
@@ -50,15 +52,37 @@ export async function applyGeneratedScreen(
   log(`Writing ${screen.suggestedPath}…`);
   await wc.fs.writeFile(screen.suggestedPath, screen.content);
 
+  // 2a. verify the write actually landed (surfaces silent FS failures)
+  let written = "";
+  try {
+    written = await wc.fs.readFile(screen.suggestedPath, "utf-8");
+  } catch (e) {
+    throw new Error(
+      `Verify-read failed after writing ${screen.suggestedPath}: ${
+        e instanceof Error ? e.message : e
+      }`,
+    );
+  }
+  if (written.length !== screen.content.length) {
+    log(
+      `⚠ wrote ${screen.content.length} chars but read back ${written.length} — proceeding`,
+    );
+  } else {
+    log(`✓ wrote ${written.length} chars`);
+  }
+
   // 3. patch the registry
   log("Registering the screen…");
   const current = await wc.fs.readFile(REGISTRY_PATH, "utf-8");
   const patched = patchRegistry(current, productId, screen);
   if (patched !== current) {
     await wc.fs.writeFile(REGISTRY_PATH, patched);
+    log("✓ registry updated");
+  } else {
+    log("(registry already had this product — no change)");
   }
 
-  log("Done — Vite is refreshing the live preview.");
+  log("Vite is re-bundling…");
 }
 
 // ─── pure string transforms (easy to test) ─────────────────────────────

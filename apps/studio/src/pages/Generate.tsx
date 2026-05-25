@@ -424,7 +424,7 @@ function RightPane({
           />
         </div>
         <div className={cn("flex-1 min-h-0 flex flex-col", tab === "code" ? "" : "hidden")}>
-          <EditorPane projectId={projectId} />
+          <EditorPane projectId={projectId} refreshSignal={previewRefreshSignal} />
         </div>
       </div>
     </section>

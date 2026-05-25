@@ -63,8 +63,9 @@ export function Preview({
   const initialRefreshRef = React.useRef(refreshSignal);
   React.useEffect(() => {
     if (refreshSignal !== initialRefreshRef.current) {
-      // Slight delay so wc.fs.writeFile has settled + Vite has re-bundled
-      const t = window.setTimeout(() => setIframeKey((k) => k + 1), 600);
+      // Vite needs a moment to detect the change + re-bundle the registry
+      // module. 1.5s is enough on most machines without feeling laggy.
+      const t = window.setTimeout(() => setIframeKey((k) => k + 1), 1500);
       return () => window.clearTimeout(t);
     }
   }, [refreshSignal]);
