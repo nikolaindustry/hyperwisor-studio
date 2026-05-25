@@ -30,9 +30,12 @@ type Stage =
 export function Preview({
   projectId,
   creds,
+  refreshSignal = 0,
 }: {
   projectId: string | null;
   creds: Creds | null;
+  /** Bump to force a clean iframe reload (used after Quick mode writes files). */
+  refreshSignal?: number;
 }) {
   const [stage, setStage] = React.useState<Stage>("idle");
   const [stageMessage, setStageMessage] = React.useState<string>("");
@@ -53,6 +56,18 @@ export function Preview({
     setViewport(id);
     if (VIEWPORTS[id].width) setCustomWidth(VIEWPORTS[id].width!);
   }
+
+  // Force a clean iframe reload whenever refreshSignal changes. WebContainer
+  // file events don't always propagate to Vite's HMR for registry-level
+  // imports, so we hard-refresh after Quick writes files.
+  const initialRefreshRef = React.useRef(refreshSignal);
+  React.useEffect(() => {
+    if (refreshSignal !== initialRefreshRef.current) {
+      // Slight delay so wc.fs.writeFile has settled + Vite has re-bundled
+      const t = window.setTimeout(() => setIframeKey((k) => k + 1), 600);
+      return () => window.clearTimeout(t);
+    }
+  }, [refreshSignal]);
 
   // ─── Eager boot of the template ─────────────────────────────────────
   React.useEffect(() => {

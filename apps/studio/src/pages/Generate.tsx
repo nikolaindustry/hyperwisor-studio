@@ -1,10 +1,14 @@
 import * as React from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
+  ChevronDown,
   ChevronLeft,
+  ChevronRight,
   Code2,
+  Copy,
   Cpu,
   Download,
+  FileCode,
   KeyRound,
   Monitor,
   Play,
@@ -33,6 +37,8 @@ type Event = {
   tool?: string;
   args?: string;
   message?: string;
+  path?: string;
+  content?: string;
 };
 
 export function Generate() {
@@ -62,6 +68,7 @@ export function Generate() {
     duration_ms?: number;
     tokens?: number;
   } | null>(null);
+  const [previewRefreshSignal, setPreviewRefreshSignal] = React.useState(0);
   const logRef = React.useRef<HTMLDivElement>(null);
   const eventCounterRef = React.useRef(0);
 
@@ -104,10 +111,13 @@ export function Generate() {
           tokens ? ` (${tokens} tokens)` : ""
         }`,
       });
-      setStats({
-        tokens,
-        // Lovable usage doesn't surface a USD cost; show $0 for the user
-        cost: 0,
+      setStats({ tokens, cost: 0 });
+
+      // Show the generated TSX inline (collapsed by default).
+      push({
+        type: "code",
+        path: res.screen.suggestedPath,
+        content: res.screen.content,
       });
 
       push({ type: "log", message: `Applying ${res.screen.suggestedPath}…` });
@@ -115,7 +125,11 @@ export function Generate() {
         push({ type: "log", message: m }),
       );
 
-      push({ type: "success", message: "Done — switch to Preview to see it" });
+      // Force the Preview iframe to reload — WebContainer's HMR doesn't
+      // always pick up wc.fs.writeFile changes to registry-level imports.
+      setPreviewRefreshSignal((n) => n + 1);
+
+      push({ type: "success", message: "Done — Preview refreshed" });
       setRunning(false);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -296,7 +310,11 @@ export function Generate() {
         </section>
 
         {/* RIGHT — Preview / Code tabs */}
-        <RightPane projectId={projectId} creds={creds} />
+        <RightPane
+          projectId={projectId}
+          creds={creds}
+          previewRefreshSignal={previewRefreshSignal}
+        />
       </div>
     </>
   );
@@ -374,9 +392,11 @@ type RightTab = "preview" | "code";
 function RightPane({
   projectId,
   creds,
+  previewRefreshSignal,
 }: {
   projectId: string | null;
   creds: ReturnType<typeof useAuth>["creds"];
+  previewRefreshSignal: number;
 }) {
   const [tab, setTab] = React.useState<RightTab>("preview");
   return (
@@ -397,7 +417,11 @@ function RightPane({
       </div>
       <div className="flex-1 min-h-0 flex flex-col">
         <div className={cn("flex-1 min-h-0 flex flex-col", tab === "preview" ? "" : "hidden")}>
-          <Preview projectId={projectId} creds={creds} />
+          <Preview
+            projectId={projectId}
+            creds={creds}
+            refreshSignal={previewRefreshSignal}
+          />
         </div>
         <div className={cn("flex-1 min-h-0 flex flex-col", tab === "code" ? "" : "hidden")}>
           <EditorPane projectId={projectId} />
@@ -489,6 +513,9 @@ function EventRow({ ev }: { ev: Event }) {
       </div>
     );
   }
+  if (ev.type === "code") {
+    return <CodeBlock path={ev.path ?? ""} content={ev.content ?? ""} />;
+  }
   if (ev.type === "success") {
     return (
       <div className={cn("text-[12.5px] flex items-center gap-1.5 text-success px-1 animate-fade-in")}>
@@ -505,5 +532,52 @@ function EventRow({ ev }: { ev: Event }) {
   }
   return (
     <div className="text-[11.5px] text-muted px-1 font-mono animate-fade-in">{ev.message}</div>
+  );
+}
+
+function CodeBlock({ path, content }: { path: string; content: string }) {
+  const [open, setOpen] = React.useState(true);
+  const [copied, setCopied] = React.useState(false);
+  const lineCount = content.split("\n").length;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch { /* ignore */ }
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-panel overflow-hidden animate-fade-in">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2 px-3 h-8 hover:bg-surface-2 transition-colors text-left"
+      >
+        {open ? (
+          <ChevronDown size={12} className="text-muted shrink-0" />
+        ) : (
+          <ChevronRight size={12} className="text-muted shrink-0" />
+        )}
+        <FileCode size={12} className="text-accent shrink-0" />
+        <span className="text-[12px] font-mono text-text truncate">{path}</span>
+        <span className="ml-auto text-[10.5px] text-muted tabular-nums">
+          {lineCount} lines · {content.length} chars
+        </span>
+        <button
+          onClick={(e) => { e.stopPropagation(); void copy(); }}
+          className="h-6 px-1.5 rounded text-muted hover:text-text hover:bg-surface-2 flex items-center gap-1 text-[11px]"
+          title="Copy"
+        >
+          <Copy size={11} />
+          {copied ? "Copied" : ""}
+        </button>
+      </button>
+      {open ? (
+        <pre className="max-h-[280px] overflow-auto m-0 px-3 py-2 text-[11.5px] leading-snug bg-bg border-t border-border font-mono whitespace-pre">
+          {content}
+        </pre>
+      ) : null}
+    </div>
   );
 }
