@@ -135,7 +135,16 @@ app.post("/api/generate", async (req, reply) => {
       send({ type: "studio.done", projectId });
     }
   } catch (e) {
-    send({ type: "studio.error", message: e.message });
+    // Log full error to the server console so we can see what's actually
+    // failing (auth, missing CLI, SDK internals, etc).
+    console.error("\n=== generate failed ===");
+    console.error(e);
+    if (e?.stack) console.error(e.stack);
+    console.error("=======================\n");
+    send({
+      type: "studio.error",
+      message: `${e?.name || "Error"}: ${e?.message || String(e)}`,
+    });
   } finally {
     reply.raw.end();
   }

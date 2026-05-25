@@ -93,6 +93,7 @@ Report success only after \`npx tsc --noEmit\` passes cleanly.
   });
 
   let turns = 0;
+  try {
   for await (const msg of result) {
     if (msg.type === "assistant") {
       turns++;
@@ -118,10 +119,24 @@ Report success only after \`npx tsc --noEmit\` passes cleanly.
         });
         return { ok: true, turns: msg.num_turns };
       } else {
-        onEvent({ type: "agent.error", subtype: msg.subtype });
-        return { ok: false, error: msg.subtype };
+        console.error("[agent] result error:", msg);
+        onEvent({
+          type: "agent.error",
+          subtype: msg.subtype,
+          message: msg.result || msg.subtype || "agent returned an error result",
+        });
+        return { ok: false, error: msg.result || msg.subtype };
       }
     }
+  }
+  } catch (e) {
+    console.error("[agent] thrown during query loop:", e);
+    onEvent({
+      type: "agent.error",
+      subtype: e?.name || "exception",
+      message: e?.message || String(e),
+    });
+    return { ok: false, error: e?.message || "agent_threw" };
   }
   return { ok: false, error: "agent_no_result" };
 }
